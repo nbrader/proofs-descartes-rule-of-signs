@@ -1,0 +1,1 @@
+Proof of Descartes' rule of signs, a useful theorem for real-root isolation.
