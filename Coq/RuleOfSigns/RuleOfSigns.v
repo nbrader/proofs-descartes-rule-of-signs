@@ -1,47 +1,64 @@
-Require Import Coq.Lists.List.
-Import ListNotations.
+Require Import Coq.Program.Basics.
+Require Import Coq.Program.Combinators.
 Require Import Coq.Reals.Reals.
 Open Scope R_scope.
+
 Require Import Psatz.
 
-(* Definition of a polynomial as a list of coefficients *)
+
 Definition polynomial := list R.
 
-(* Example: Polynomial 3 - 2x + 4x^2 would be represented as [3; -2; 4] *)
-Definition example_poly : polynomial := [3; -2; 4].
+(* Example: Representing f(x) = 3 + 2x - 5x^2 *)
+Definition example_poly : polynomial := [3; 2; -5].
 
-(* Function to calculate the number of sign changes in the polynomial *)
-Fixpoint count_sign_changes (p : polynomial) : nat :=
-  match p with
-  | [] => 0
-  | [_] => 0
-  | a :: b :: rest =>
-      if Rltb (a * b) 0 then 1 + count_sign_changes (b :: rest)
-      else count_sign_changes (b :: rest)
-  end.
+(* Function to count the number of strictly positive roots *)
+(* Note: This function will depend on roots finding, which is complex *)
+Parameter Z : polynomial -> nat.
 
-(* Function to compute the derivative of a polynomial *)
-Fixpoint derivative (p : polynomial) : polynomial :=
-  match p with
-  | [] => []
-  | [_] => []
-  | a :: rest =>
-      let fix derivative_aux p n :=
-          match p with
-          | [] => []
-          | h :: t => (h * n) :: derivative_aux t (n + 1)
-          end
-      in derivative_aux rest 1
-  end.
+(* Lemma: If a_n * a_0 > 0, then Z(f) is even; if a_n * a_0 < 0, then Z(f) is odd *)
+Lemma even_odd_Z :
+  forall (f : polynomial) (a0 an : R),
+  (hd 0 f = a0) ->
+  (hd 0 (rev f) = an) ->
+  if Rlt_dec (a0 * an) 0 then Nat.odd (Z f) = true
+  else Nat.even (Z f) = true.
+Proof.
+  (* Outline of the proof:
+     - Consider the behavior of the polynomial f(x) at 0 and infinity.
+     - If f(0) > 0 and f(∞) > 0, the number of positive roots must be even.
+     - If f(0) < 0 and f(∞) > 0, the number of positive roots must be odd.
+     - Use intermediate value theorem or similar to formalize crossing behavior.
+  *)
+Admitted.
 
-(* Evaluate polynomial at a given point *)
-Fixpoint eval_poly (p : polynomial) (x : R) : R :=
-  match p with
-  | [] => 0
-  | a :: rest => a + x * (eval_poly rest x)
-  end.
+(* Main theorem: Descartes's rule of signs *)
+Theorem descartes_rule_of_signs :
+  forall (f : polynomial),
+  Z f <= V f /\ Nat.even (V f - Z f).
+Proof.
+  (* Outline of the proof:
+     - Base case: n = 0 or n = 1, trivial.
+     - Inductive step:
+       + Assume the theorem holds for f'.
+       + Use Rolle's theorem to show the relationship between Z(f) and Z(f').
+       + Consider cases for V(f') depending on the signs of coefficients.
+       + Show that Z(f) and V(f) have the same parity.
+       + Conclude Z(f) <= V(f).
+  *)
+  intros f.
+  induction f as [| a f' IHf'].
+  - (* Base case: constant polynomial, Z(f) = 0, V(f) = 0 *)
+    split; auto.
+  - (* Inductive case: polynomial with degree n >= 1 *)
+    destruct f' as [| b f''].
+    + (* Case: f(x) = ax + b, linear polynomial *)
+      split; simpl; lia.
+    + (* Case: higher degree polynomial *)
+      assert (H : Z f' <= V f' /\ Nat.even (V f' - Z f')) by apply IHf'.
+      destruct H as [H1 H2].
 
-(* A helper function for counting positive roots *)
-Fixpoint count_positive_roots (p : polynomial) : nat :=
-  (* We would use this function within the inductive proof *)
-  0. (* Placeholder, as the actual implementation depends on deeper analysis *)
+      (* Use Rolle's theorem and sign analysis *)
+      (* Handle different cases for V(f') and V(f) *)
+      (* Show that Z(f) <= V(f) and they have the same parity *)
+      admit.
+Admitted.
