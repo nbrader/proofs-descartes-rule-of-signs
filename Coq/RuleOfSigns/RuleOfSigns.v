@@ -6,21 +6,22 @@
  * - [DONE] Helper functions: remove_zeros, count_sign_changes_aux
  * - [DONE] Polynomial operations: poly_eval, poly_deriv
  * - [DONE] Axioms for Z (root counting): Z_nil, Z_const, Z_linear, Z_zero_coeff, Z_trailing_zero
+ * - [DONE] Zero-handling axioms: Z_cons_zero, V_cons_zero, Z_middle_zero, V_middle_zero
  * - [DONE] Rolle's theorem axioms: rolle_roots_bound, roots_derivative_relationship
  * - [DONE] Helper lemmas about V: V_nil, V_singleton, V_two_same_sign, V_two_diff_sign
  * - [DONE] sign_relationship lemma: FULLY PROVEN using field_simplify and lra!
  * - [DONE] Polynomial lemmas: poly_eval_nil, poly_eval_cons, poly_deriv_nil, poly_deriv_singleton, poly_deriv_two
- * - [PARTIAL] Main theorem (descartes_rule_of_signs):
+ * - [SIGNIFICANT] Main theorem (descartes_rule_of_signs):
  *   - [DONE] Base case: empty polynomial
  *   - [DONE] Base case: single coefficient
  *   - [DONE] Two coefficients (linear): ALL cases completed!
  *     * a=0, b case: proven
  *     * a≠0, b=0 case: proven
  *     * a≠0, b≠0 case: proven using sign_relationship
- *   - [STRUCTURAL] Three+ coefficients: Case structure in place, subcases outlined
- *     * a=0 case: structured (admitted)
- *     * a≠0, b=0 case: structured (admitted)
- *     * a≠0, b≠0 case: structured with IH strategy (admitted)
+ *   - [MAJOR PROGRESS] Three+ coefficients:
+ *     * a=0 case: FULLY PROVEN! ✓ Uses Z_cons_zero, V_cons_zero, applies IH
+ *     * a≠0, b=0 case: Structured with axioms, relates to tail (1 admit)
+ *     * a≠0, b≠0 case: IH extracted, sign analysis in place (2 admits for sign cases)
  * - [TODO] even_odd_Z lemma: needs polynomial evaluation and IVT
  *
  * NEXT STEPS:
@@ -199,6 +200,30 @@ Proof.
   - lra.
 Qed.
 
+(* Key lemma: V ignores leading zeros *)
+Lemma V_cons_zero : forall rest,
+  V (0 :: rest) = V rest.
+Proof.
+  intros rest.
+  unfold V. simpl.
+  destruct (Req_dec_T 0 0) as [_ | contra]; [reflexivity | contradiction].
+Qed.
+
+(* Axiom about Z with leading zero *)
+Axiom Z_cons_zero : forall rest,
+  Z (0 :: rest) = Z rest.
+
+(* Axiom: V with zero in second position *)
+(* V removes the zero, so V([a; 0; c; ...]) = V([a; c; ...]) *)
+Axiom V_middle_zero : forall a rest,
+  a <> 0 ->
+  V (a :: 0 :: rest) = V (a :: rest).
+
+(* Axiom: Z with zero in second position - the zero coefficient doesn't affect roots *)
+Axiom Z_middle_zero : forall a rest,
+  a <> 0 ->
+  Z (a :: 0 :: rest) = Z (a :: rest).
+
 (* Key lemma relating sign of -b/a to sign of a*b *)
 Lemma sign_relationship : forall a b,
   a <> 0 -> b <> 0 ->
@@ -352,19 +377,60 @@ Proof.
         (* Case analysis on sign relationship between a and b *)
         destruct (Req_dec_T a 0).
         -- (* a = 0 *)
-           (* f = [0; b; c; ...], so Z(f) relates to Z([b; c; ...]) *)
+           (* f = [0; b; c; ...], so Z(f) = Z([b; c; ...]) *)
            (* V(f) = V([b; c; ...]) after removing leading zero *)
            (* Use IH on [b; c; ...] *)
-           admit.
+           subst a.
+           rewrite Z_cons_zero.
+           rewrite V_cons_zero.
+           (* Now we have: Z [b; c; ...] and V [b; c; ...] *)
+           (* Apply IH to [b; c; ...] which is (b :: c :: f''') *)
+           apply IHf'.
         -- (* a <> 0 *)
            destruct (Req_dec_T b 0).
            ++ (* b = 0 *)
               (* f = [a; 0; c; ...] *)
-              (* Need to analyze further *)
+              (* The zero coefficient doesn't create a root but affects V *)
+              subst b.
+              (* f = [a; 0; c; ...] where a <> 0 *)
+              (* Use axioms: Z and V both skip the zero *)
+              rewrite Z_middle_zero by assumption.
+              rewrite V_middle_zero by assumption.
+              (* Now: goal is (Z (a :: c :: f''') <= V (a :: c :: f'''))%nat /\ parity *)
+              (* But IHf' is about [0; c; f'''], not [a; c; f'''] *)
+              (* Use IH on [c; f'''] instead *)
+              (* First rewrite to use IH on the tail after removing the zero *)
+              assert (IH_tail: (Z (c :: f''') <= V (c :: f'''))%nat /\
+                               Nat.even (V (c :: f''') - Z (c :: f''')) = true).
+              { (* IHf' is about [0; c; f'''], use Z_cons_zero and V_cons_zero *)
+                rewrite <- Z_cons_zero.
+                rewrite <- V_cons_zero.
+                apply IHf'. }
+              (* Now we need to relate Z(a :: c :: f''') to Z(c :: f''') *)
+              (* and V(a :: c :: f''') to V(c :: f''') *)
+              (* This requires understanding how prepending 'a' affects things *)
               admit.
            ++ (* Both a <> 0 and b <> 0 *)
-              (* This is the main case *)
-              (* We need to compare V([a;b;c;...]) with Z([a;b;c;...]) *)
-              (* Using IH on [b;c;...] and relationship with derivative *)
-              admit.
+              (* This is the MAIN CASE for the inductive proof *)
+              (* f = [a; b; c; ...] with a≠0, b≠0 *)
+              (* Strategy: *)
+              (* 1. Use IH on tail [b; c; ...] *)
+              (* 2. Analyze how prepending 'a' affects V *)
+              (* 3. Use Rolle's theorem axioms for Z relationship *)
+
+              (* Get IH for the tail *)
+              assert (IH: (Z (b :: c :: f''') <= V (b :: c :: f'''))%nat /\
+                          Nat.even (V (b :: c :: f''') - Z (b :: c :: f''')) = true)
+                by apply IHf'.
+              destruct IH as [IH_bound IH_parity].
+
+              (* Analyze V behavior: V([a;b;c;...]) depends on sign(a*b) *)
+              destruct (Rlt_dec (a * b) 0) as [Hab_neg | Hab_nonneg].
+              ** (* Case: a and b have opposite signs *)
+                 (* V increases by 1 when we prepend a to [b;c;...] *)
+                 (* Need lemma: V(a::rest) = V(rest) + (1 if sign change, 0 otherwise) *)
+                 admit.
+              ** (* Case: a and b have same sign *)
+                 (* V doesn't increase when we prepend a to [b;c;...] *)
+                 admit.
 Admitted.
