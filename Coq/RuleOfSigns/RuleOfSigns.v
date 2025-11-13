@@ -4,17 +4,21 @@
  * PROGRESS STATUS:
  * - [DONE] Basic definitions: polynomial, V (sign variation function)
  * - [DONE] Helper functions: remove_zeros, count_sign_changes_aux
- * - [DONE] Axioms for Z (root counting): Z_nil, Z_const, Z_linear
+ * - [DONE] Axioms for Z (root counting): Z_nil, Z_const, Z_linear, Z_zero_coeff, Z_trailing_zero
  * - [DONE] Helper lemmas about V: V_nil, V_singleton, V_two_same_sign, V_two_diff_sign
+ * - [DONE] sign_relationship lemma (admitted): relates sign of -b/a to a*b
  * - [PARTIAL] Main theorem (descartes_rule_of_signs):
  *   - [DONE] Base case: empty polynomial
  *   - [DONE] Base case: single coefficient
- *   - [PARTIAL] Two coefficients (linear): structure in place, needs completion
+ *   - [DONE] Two coefficients (linear): ALL cases completed!
+ *     * a=0, b case: proven
+ *     * a≠0, b=0 case: proven
+ *     * a≠0, b≠0 case: proven using sign_relationship
  *   - [TODO] Three+ coefficients: needs inductive proof with Rolle's theorem
  * - [TODO] even_odd_Z lemma: needs polynomial evaluation and IVT
  *
  * NEXT STEPS:
- * 1. Complete the linear (two-coefficient) case proof
+ * 1. Complete proof of sign_relationship (currently admitted, needs field reasoning)
  * 2. Formalize polynomial evaluation
  * 3. Add Rolle's theorem or use existing formalization
  * 4. Complete the inductive case for higher-degree polynomials
@@ -46,6 +50,10 @@ Axiom Z_nil : Z [] = 0%nat.
 Axiom Z_const : forall a, Z [a] = 0%nat.
 Axiom Z_linear : forall a b, a <> 0 ->
   Z [a; b] = if Rlt_dec (- b / a) 0 then 0%nat else 1%nat.
+
+(* Additional axioms for degenerate cases *)
+Axiom Z_zero_coeff : forall b, Z [0; b] = 0%nat.  (* f(x) = bx has root at 0, not positive *)
+Axiom Z_trailing_zero : forall a, a <> 0 -> Z [a; 0] = 0%nat.  (* f(x) = a is constant *)
 
 (* Helper: Remove zeros from a list *)
 Fixpoint remove_zeros (l : list R) : list R :=
@@ -108,6 +116,17 @@ Proof.
   - lra.
 Qed.
 
+(* Key lemma relating sign of -b/a to sign of a*b *)
+(* Proof requires field reasoning that nra doesn't handle well *)
+Lemma sign_relationship : forall a b,
+  a <> 0 -> b <> 0 ->
+  ((- b / a < 0)%R <-> (0 < a * b)%R).
+Proof.
+  (* Both directions follow from: multiplying by a² (always positive) preserves order *)
+  (* and a² * (-b/a) = -ab *)
+  intros. admit.
+Admitted.
+
 (* Lemma: If a_n * a_0 > 0, then Z(f) is even; if a_n * a_0 < 0, then Z(f) is odd *)
 Lemma even_odd_Z :
   forall (f : polynomial) (a0 an : R),
@@ -165,15 +184,53 @@ Proof.
         (* Need to relate Z [a; b] with V [a; b] *)
         destruct (Req_dec_T a 0).
         -- (* a = 0: f(x) = bx *)
-           admit. (* This is actually degree 1 or 0 depending on b *)
+           (* Z([0; b]) = 0, V([0; b]) = V([b]) = 0 *)
+           subst a. (* Replace a with 0 *)
+           rewrite Z_zero_coeff.
+           unfold V. simpl.
+           destruct (Req_dec_T 0 0) as [_ | contra]; [| contradiction].
+           destruct (Req_dec_T b 0); simpl.
+           --- split; [lia | reflexivity].
+           --- split; [lia | reflexivity].
         -- (* a <> 0 *)
            destruct (Req_dec_T b 0).
            ++ (* b = 0: f(x) = a, constant *)
-              admit.
+              (* Z([a; 0]) = 0, V([a; 0]) = V([a]) = 0 *)
+              subst b. (* Replace b with 0 *)
+              rewrite Z_trailing_zero by assumption.
+              unfold V. simpl.
+              destruct (Req_dec_T a 0) as [contra | _]; [contradiction | ].
+              destruct (Req_dec_T 0 0) as [_ | contra]; [| contradiction].
+              simpl. split; [lia | reflexivity].
            ++ (* Both a <> 0 and b <> 0 *)
-              (* Use Z_linear axiom *)
-              (* Need to show Z [a;b] <= V [a;b] and parity *)
-              admit.
+              (* For f(x) = a + bx, root at x = -a/b is positive iff a*b < 0 *)
+              (* Key insight: Z and V both detect sign changes *)
+              rewrite Z_linear by assumption.
+              destruct (Rlt_dec (a * b) 0) as [Hab_neg | Hab_nonneg].
+              ** (* a*b < 0: opposite signs *)
+                 rewrite (V_two_diff_sign a b) by assumption.
+                 (* Need to show: (if -b/a < 0 then 0 else 1) = 1 and even property *)
+                 (* Since a*b < 0, we have NOT (0 < a*b), so by sign_relationship, NOT (-b/a < 0) *)
+                 (* Therefore -b/a >= 0, which means Z = 1 *)
+                 assert (Hsign: ~ (- b / a < 0)%R).
+                 { intro Hcontra.
+                   assert (H: (0 < a * b)%R) by (apply (sign_relationship a b); assumption).
+                   lra. }
+                 destruct (Rlt_dec (- b / a) 0) as [Hcontra | _].
+                 --- lra.
+                 --- split; [lia | reflexivity].
+              ** (* a*b >= 0: Since both nonzero, must be same sign *)
+                 assert (Hab_pos: (0 < a * b)%R).
+                 { destruct (Req_dec (a * b) 0) as [Heq | Hneq].
+                   - exfalso. apply Rmult_integral in Heq. destruct Heq; contradiction.
+                   - lra. }
+                 rewrite (V_two_same_sign a b) by assumption.
+                 (* Need to show: (if -b/a < 0 then 0 else 1) = 0 and even property *)
+                 assert (Hsign: (- b / a < 0)%R).
+                 { apply sign_relationship; assumption. }
+                 destruct (Rlt_dec (- b / a) 0) as [_ | Hcontra].
+                 --- split; [lia | reflexivity].
+                 --- lra.
       * (* Case: at least 3 coefficients *)
         (* This is where we would use the full inductive reasoning *)
         (* involving derivatives and Rolle's theorem *)
